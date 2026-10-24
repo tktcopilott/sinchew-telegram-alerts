@@ -1,0 +1,9 @@
+# Non-secret settings. Keep Telegram credentials in GitHub Actions secrets.
+[monitor]
+tag_id = 1495 # Captured tag ID for https://www.sinchew.com.my/tag/诈骗
+label = "Sin Chew · 诈骗"
+max_pages = 20 # Fail visibly instead of silently truncating a larger backlog.
+baseline_pages = 2 # Existing articles to record quietly during initialization.
+max_deliveries = 50 # Remaining queue is delivered by subsequent runs.
+heartbeat_hours = 24 # Set 0 to disable the daily healthy-check message.
+state_branch = "monitor-state"

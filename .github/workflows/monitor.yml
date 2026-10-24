@@ -1,0 +1,66 @@
+name: Article monitor
+
+on:
+  schedule:
+    # Five-minute checks offset from the busy start of the hour. All times UTC.
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'First run: diagnose, then initialize. Later: check.'
+        required: true
+        default: diagnose
+        type: choice
+        options:
+          - diagnose
+          - test-telegram
+          - initialize
+          - check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: article-monitor-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    # Uploading the project alone never activates recurring notifications.
+    if: github.event_name == 'workflow_dispatch' || vars.MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # Checkpoint delivery state on the separate state branch.
+    steps:
+      - name: Check out trusted default-branch source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Run monitor
+        env:
+          MODE: ${{ inputs.mode || 'check' }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python -m article_alerts "$MODE"
+      - name: Record run status
+        if: always()
+        env:
+          RUN_STATUS: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('Article monitor: ' + os.environ['RUN_STATUS'] + '\n\n')
+              summary.write('Checked at: ' + datetime.now(timezone.utc).isoformat() + '\n\n')
+              summary.write('Delivery state is preserved on the monitor-state branch. ')
+              summary.write('If a run fails, read its safe error message before retrying.\n')
+          PY
